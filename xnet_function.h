@@ -448,5 +448,42 @@ void xorGEMM_omp_unrolled(int M,int K,int N,
     } 
 }
 
+/*
+ * @brief: GEMM using xnor operation. 
+ *         In convolution, M means the number of filters and K means (ck^2)/BIN_SIZE. 
+ *         N means the output_spatial_size. A is weights pointer. B is the input 
+ *         column pointer. C is the output pointer. 
+ *
+ *         @TODO inner_product 
+ * @param:
+ *         int M, K, N;
+ *         int lda = K , ldb = N, ldc = N ;
+ *         int size, the actual size of a vector;
+ *  
+ */
+template <typename Dtype>
+void xnorGEMM_baseline(int M,int K,int N, 
+              const BinaryCode* A, int lda ,
+              const BinaryCode* B, int ldb,
+              Dtype* C, int ldc,
+              vector<Dtype>& alphas){
+  int m,k,n;
+  for (m = 0; m < M; m++){
+    register Dtype alpha = alphas[m];
+    for(k = 0; k < K; k++){
+      register BinaryCode temp_A= A[m*lda+k]; 
+      for(n = 0; n < N; n++){
+         C[m*ldc+n] += alpha*POPCNT(~(temp_A^B[k*ldb+n]));
+      }
+    }
+  }
+
+  //for(m = 0; m < M; m++)
+    //for(n = 0; n < N; n++){
+      //C[m*ldc+n] = size - 2*C[m*ldc+n];
+      //C[m*ldc+n] *= alphas[m];
+    //} 
+}
+
 }
 #endif 
