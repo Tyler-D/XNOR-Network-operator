@@ -341,7 +341,7 @@ void binarizeIm2Col_omp(const Dtype* input_data, BinBlob<Dtype>& col_buf,
  */
 
 template <typename Dtype>
-void xnorGEMM_baseline(int M,int K,int N, 
+void xorGEMM_baseline(int M,int K,int N, 
               const BinaryCode* A, int lda ,
               const BinaryCode* B, int ldb,
               Dtype* C, int ldc,
@@ -365,7 +365,7 @@ void xnorGEMM_baseline(int M,int K,int N,
 
 
 template <typename Dtype>
-void xnorGEMM_omp_baseline(int M,int K,int N, 
+void xorGEMM_omp_baseline(int M,int K,int N, 
                   const BinaryCode* A, int lda,
                   const BinaryCode* B, int ldb,
                   Dtype* C, int ldc,
@@ -398,7 +398,7 @@ void xnorGEMM_omp_baseline(int M,int K,int N,
  */
 #define UNROLLN 6
 template <typename Dtype>
-void xnorGEMM_omp_unrolled(int M,int K,int N, 
+void xorGEMM_omp_unrolled(int M,int K,int N, 
                   const BinaryCode* A, int lda,
                   const BinaryCode* B, int ldb,
                   Dtype* C, int ldc,
