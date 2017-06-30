@@ -118,152 +118,22 @@ uint64_t popcnt_lookup_8bit(const uint64_t* x){
   return result;
 }
 
-uint64_t popcnt_lookup_8bit(const uint8_t* data, const size_t n) {
 
-    size_t result = 0;
-
-    size_t i = 0;
-    while (i + 4 <= n) {
-        result += lookup8bit[data[i]]; i++;
-        result += lookup8bit[data[i]]; i++;
-        result += lookup8bit[data[i]]; i++;
-        result += lookup8bit[data[i]]; i++;
-    }
-
-    while (i < n) {
-        result += lookup8bit[data[i]]; i++;
-    }
-
-    return result;
-}
-
-
-#if defined(HAVE_SSE_INSTRUCTIONS)
-inline uint64_t popcnt_cpu_64bit(const uint64_t* x){
-  uint64_t v = *x;
-  return _popcnt64(v);
-}
-
-uint64_t popcnt_cpu_64bit(const uint8_t* data, const size_t n) {
-
-    uint64_t result = 0;
-
-    uint64_t v, i = 0;
-#define ITER { \
-        v = *reinterpret_cast<const uint64_t*>(data + i); \
-        result += _popcnt64(v); \
-        i += 8; \
-    }
-
-    while (i + 4*8 <= n) {
-        ITER ITER ITER ITER
-    }
-
-#undef ITER
-
-    while (i < n) {
-        result += lookup8bit[data[i]];
-        i++;
-    }
-
-    return result;
-}
-#endif
-
-#if defined(HAVE_NEON_INSTRUCTIONS)
-uint64_t popcnt_neon_vcnt(const uint64_t* x){
-  uint64_t result = 0;
-  return result;
-}
-uint64_t popcnt_neon_vcnt(const uint8_t* data, const size_t size)
-{
-    const size_t chunk_size = 16 * 4 * 2;
-
-    uint8_t* ptr = const_cast<uint8_t*>(data);
-
-    const size_t n = size / chunk_size;
-    const size_t k = size % chunk_size;
-
-    uint32x4_t sum = vcombine_u32(vcreate_u32(0), vcreate_u32(0));
-
-    for (size_t i=0; i < n; i++, ptr += chunk_size) {
-
-        uint8x16x4_t input0 = vld4q_u8(ptr + 0 * 16 * 4);
-        uint8x16x4_t input1 = vld4q_u8(ptr + 1 * 16 * 4);
-
-        uint8x16_t t0   = vcntq_u8(input0.val[0]);
-        t0 = vaddq_u8(t0, vcntq_u8(input0.val[1]));
-        t0 = vaddq_u8(t0, vcntq_u8(input0.val[2]));
-        t0 = vaddq_u8(t0, vcntq_u8(input0.val[3]));
-
-        t0 = vaddq_u8(t0, vcntq_u8(input1.val[0]));
-        t0 = vaddq_u8(t0, vcntq_u8(input1.val[1]));
-        t0 = vaddq_u8(t0, vcntq_u8(input1.val[2]));
-        t0 = vaddq_u8(t0, vcntq_u8(input1.val[3]));
-
-        const uint16x8_t t1 = vpaddlq_u8(t0);
-
-        sum = vpadalq_u16(sum, t1);
-    }
-
-    uint32_t scalar = 0;
-    uint32_t tmp[4];
-
-    vst1q_u32(tmp, sum);
-    for (int i=0; i < 4; i++) {
-        scalar += tmp[i];
-    }
-
-    for (size_t j=0; j < k; j++) {
-        scalar += lookup8bit[ptr[j]];
-    }
-
-    return scalar;
-}
+#ifdef HAVE_NOTHING
+#define POPCNT(val) popcnt_lookup_8bit(val) 
 #endif 
 
+#ifdef HAVE_BUILTIN
+#define POPCNT(val) __builtin_popcountll(val)
+#endif 
 
-inline uint64_t xnet_popcnt(uint64_t x){
-  uint64_t result = 0;
-#if defined(HAVE_NOTHING)
-  result = popcnt_lookup_8bit(&x);
+#ifdef HAVE_SSE_INSTRUCTIONS
+#define POPCNT(val) _popcnt64(val)
 #endif
 
-#if defined(HAVE_SSE_INSTRUCTIONS)
-  result = popcnt_cpu_64bit(&x);
+#ifdef HAVE_NEON_INSTRUCTIONS
+#define POPCNT(val) 
 #endif
-
-#if defined(HAVE_NEON_INSTRUCTIONS)
-  result = popcnt_neon_vcnt(&x);
-#endif
-
-  return result;
-}
-
-/*
- @brief n-2*popcnt(a^b).It's the base operation for XNOR convolution   
- @input:
-      - n. actual size of operation binary code. In XNOR convolution, it is c*k^2
-      - a. operation binary code.
-      - b. operation binary code.
- @return:
-      - xnor convolution result of two binary code vector.
-
- DEPRECATED: package this process in xnor convolution
- */
-//inline int xnet_sconv(const uint64_t n, const vector<bitset<BIN_SIZE> >& a, 
-                      //const vector<bitset<BIN_SIZE> >& b){
-  //CHECK_EQ(a.size(), b.size());
-  //uint64_t result = 0;
-  ////popcnt(a^b)
-  //for(int i = 0; i < a.size(); i++)
-  //{
-    //result += xnet_popcnt(static_cast<uint64_t>((a[i].to_ulong())^(b[i].to_ulong()))); 
-  //}
-  //int v = static_cast<int>(result); 
-  //int size = static_cast<int>(n);
-  //return (size - 2*v);
-//}
 
 /*
 @brief Binarize convolution weights. 
@@ -299,16 +169,6 @@ void binarizeWeights(const Dtype* real_weights, BinBlob<Dtype>& binary_weights,
       BIT_SET(b_data[out_idx+weight_idx/BIN_SIZE], (int)(weight_idx%BIN_SIZE), 
           sign);
     }
-    //for(int weight_out_idx = 0 ; weight_out_idx < kernel_count; weight_out_idx+=BIN_SIZE){
-        ////@TODO may exceed the available boundry a little. But just keep
-        ////this 'bug' to see what will happen.
-        //for(int weight_in_idx = 0; weight_in_idx < BIN_SIZE; weight_in_idx++){
-          //uint64_t sign = (r_data[filter_idx*kernel_count+weight_out_idx+weight_in_idx]>0);
-           //BIT_SET(b_data[b_data_idx], 
-                   //weight_in_idx, sign); 
-        //}
-        //b_data_idx++;
-    //}
   }
 }  
 
@@ -318,7 +178,6 @@ void binarizeWeights_omp(const Dtype* real_weights, BinBlob<Dtype>& binary_weigh
   const int* shape = binary_weights.shape(); 
   int filter_num = shape[0];
   int kernel_count = shape[1] * shape[2] * shape[3];
-  unsigned long count = binary_weights.count();
   const Dtype* r_data = real_weights; 
 //caculate alpha 
   alpha.resize(filter_num); 
@@ -426,9 +285,10 @@ void binarizeIm2Col_omp(const Dtype* input_data, BinBlob<Dtype>& col_buf,
   col_buf.allocateBC(output_cnt, true);
   BinaryCode* col_data = col_buf.mutable_b_data();
   //caffe im2col
-  #pragma omp parallel for 
   for(int channel = -1;++channel < channels;input_data += channel_size){
+    #pragma omp parallel for 
     for(int kernel_row = 0; kernel_row < kernel_h; kernel_row++){
+      #pragma omp parallel for
       for(int kernel_col = 0; kernel_col < kernel_w; kernel_col++){
         int input_row = -pad_h + kernel_row * dilation_h;
         uint64_t rv_idx = channel*kernel_size + kernel_row*kernel_w 
@@ -466,7 +326,6 @@ void binarizeIm2Col_omp(const Dtype* input_data, BinBlob<Dtype>& col_buf,
 
 }
 
-
 /*
  * @brief: GEMM using xnor operation. 
  *         In convolution, M means the number of filters and K means (ck^2)/BIN_SIZE. 
@@ -492,7 +351,7 @@ void xnorGEMM_baseline(int M,int K,int N,
     for(k = 0; k < K; k++){
       register BinaryCode temp_A= A[m*lda+k]; 
       for(n = 0; n < N; n++){
-         C[m*ldc+n] += xnet_popcnt((temp_A^B[k*ldb+n]));
+         C[m*ldc+n] += POPCNT(temp_A^B[k*ldb+n]);
       }
     }
   }
@@ -504,70 +363,90 @@ void xnorGEMM_baseline(int M,int K,int N,
     } 
 }
 
+
 template <typename Dtype>
-void xnorGEMM_omp(int M,int K,int N, BinaryCode* A, BinaryCode* B, Dtype* C){
+void xnorGEMM_omp_baseline(int M,int K,int N, 
+                  const BinaryCode* A, int lda,
+                  const BinaryCode* B, int ldb,
+                  Dtype* C, int ldc,
+                  int size, vector<Dtype>& alphas){
   int m,k,n;
-  for (m = 0; m < M; ++m){
+  #pragma omp parallel for  
+  for (m = 0; m < M; m++){
+    #pragma omp parallel for
+    for(k = 0; k <K; k++){
+      BinaryCode temp_A= A[m*lda+k]; 
+      #pragma omp parallel for
+      for(n = 0; n < N; n++){
+        //C[m*ldc+n] += __builtin_popcountll(temp_A^B[k*ldb+n]); 
+        C[m*ldc+n] += POPCNT(temp_A^B[k*ldb+n]); 
+      }
+    }
   }
+
+  #pragma omp parallel for 
+  for(m = 0; m < M; m++)
+    for(n = 0; n < N; n++){
+      C[m*ldc+n] = size - 2*C[m*ldc+n];
+      C[m*ldc+n] *= alphas[m];
+    } 
 }
 
-//template <typename Dtype>
-//void xnorConvolution(BinBlob<Dtype>& input, BinBlob<Dtype>& weights, Dtype* output,
-    //const int kernel_h, const int kernel_w, const int pad_h, const int pad_w, 
-    //const int stride_h, const int stride_w, const int dilation_h,
-    //const int dilation_w)
-//{
-  ////init weights parameter
-  //const vector<int>& weights_shape = weights.shape();
-  //const vector<BinBlock>& bin_weights = weights.bin_data();
-  //int filter_num = weights_shape[0];
-  //uint64_t kernel_size = static_cast<uint64_t>(weights_shape[1]*weights_shape[2]*weights_shape[3]);
-//#if defined(DEBUG_XNOR)
-  ////LOG(INFO)<<alpha; 
-  //LOG(INFO)<<"Weights:";
-  //for(int i = 0; i<bin_weights.size(); i++){
-    //for(int j = 0; j < bin_weights[i].size(); j++)
-      //cout<<bin_weights[i][j]<<" ";
-    //cout<<endl;
-  //}
-//#endif 
+/*Code From https://github.com/hpi-xnor/BMXNet
+ * unroll the for loop to balance the computation load and the threads
+ * scheduling load.
+ */
+#define UNROLLN 6
+template <typename Dtype>
+void xnorGEMM_omp_unrolled(int M,int K,int N, 
+                  const BinaryCode* A, int lda,
+                  const BinaryCode* B, int ldb,
+                  Dtype* C, int ldc,
+                  int size, vector<Dtype>& alphas){
+  int m,k,n;
+  #pragma omp parallel for  
+  for (m = 0; m < M; m++){
+    #pragma omp parallel for
+    for(k = 0; k <(K/UNROLLN)*UNROLLN; k++){
+      BinaryCode A_PART[UNROLLN];
+      A_PART[0] = A[m*lda + k]; 
+      A_PART[1] = A[m*lda + k + 1]; 
+      A_PART[2] = A[m*lda + k + 2]; 
+      A_PART[3] = A[m*lda + k + 3]; 
+      A_PART[4] = A[m*lda + k + 4]; 
+      A_PART[5] = A[m*lda + k + 5]; 
+      #pragma omp parallel for
+      for(n = 0; n < N; n++){
+        int popc[UNROLLN];
+        popc[0] = POPCNT(A_PART[0]^B[k*ldb+n]);
+        popc[1] = POPCNT(A_PART[1]^B[(k+1)*ldb+n]);
+        popc[2] = POPCNT(A_PART[2]^B[(k+2)*ldb+n]);
+        popc[3] = POPCNT(A_PART[3]^B[(k+3)*ldb+n]);
+        popc[4] = POPCNT(A_PART[4]^B[(k+4)*ldb+n]);
+        popc[5] = POPCNT(A_PART[1]^B[(k+5)*ldb+n]);
+        //C[m*ldc+n] += __builtin_popcountll(temp_A^B[k*ldb+n]); 
+        C[m*ldc+n] += popc[0]+popc[1]+popc[2]+popc[3]+popc[4]+popc[5]; 
+      }
+    }
+    #pragma omp parallel for 
+    for(k=(K/UNROLLN)*UNROLLN;k<K;k++){
+      BinaryCode temp_A= A[m*lda+k];
+      #pragma omp parallel for
+      for(n = 0; n < N; n++){
+        C[m*ldc+n] += POPCNT(temp_A^B[k*ldb+n]);
+      }
 
-  ////init input parameter
-  //const vector<int>& input_shape = input.shape();
-  //int batch_size = input_shape[0];
-  //int channels = input_shape[1];
-  //int height = input_shape[2];
-  //int width = input_shape[3];
-  //const Dtype* input_data = input.rv_data();
-  //BinBlob<Dtype> image_input(1, channels, height, width); 
+    } 
+  }
 
-  ////intit output parameter
-  //int output_offset = 0;
-
-  ////xnor convolution 
-  //for(int batch_idx = 0; batch_idx < batch_size; batch_idx++){
-    //int input_offset = batch_idx*channels*height*width;
-    //image_input.copyRealValueFrom(input_data+input_offset); 
-    //binarizeIm2col(image_input, channels, height, width, kernel_h, kernel_w, pad_h, pad_w,
-        //stride_h, stride_w, dilation_h, dilation_w); 
-    //const vector<BinBlock>& bin_image = image_input.bin_data();
-//#if defined(DEBUG_XNOR)
-  //LOG(INFO)<<"Input:";
-  //for(int i = 0; i<bin_image.size(); i++){
-    //for(int j = 0; j < bin_image[i].size(); j++)
-      //cout<<bin_image[i][j]<<" ";
-    //cout<<endl;
-  //}
-//#endif  
-    //for(int filter_idx = 0; filter_idx < filter_num; filter_idx++){
-      //for(int field_idx = 0; field_idx < bin_image.size(); field_idx++){
-          //*(output++) = (alpha[filter_idx])*static_cast<Dtype>(xnet_sconv(kernel_size, 
-                        //bin_image[field_idx], bin_weights[filter_idx]));   
-      //}
-    //}
-  //}
-
-//}
+  #pragma omp parallel for 
+  for(m = 0; m < M; m++)
+    #pragma omp parallel for
+    for(n = 0; n < N; n++){
+      C[m*ldc+n] = size - 2*C[m*ldc+n];
+      C[m*ldc+n] *= alphas[m];
+    } 
+}
 
 }
 #endif 
