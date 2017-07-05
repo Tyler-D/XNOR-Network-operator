@@ -7,6 +7,8 @@ Before the detailed optimization, the code already runs faster than atlas/openbl
 accuracy in some simple networks.
 Still Working on openmp version. 
 
+(tried xnor and xor, it seems no difference in both speed(single thread) and accuracy.I guess it is because the relu after the convolution)  
+
 ## speed test.
 
 Enviroment |

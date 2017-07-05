@@ -469,20 +469,20 @@ void xnorGEMM_baseline(int M,int K,int N,
               vector<Dtype>& alphas){
   int m,k,n;
   for (m = 0; m < M; m++){
-    register Dtype alpha = alphas[m];
     for(k = 0; k < K; k++){
       register BinaryCode temp_A= A[m*lda+k]; 
       for(n = 0; n < N; n++){
-         C[m*ldc+n] += alpha*POPCNT(~(temp_A^B[k*ldb+n]));
+         C[m*ldc+n] += POPCNT(~(temp_A^B[k*ldb+n]));
       }
     }
   }
 
-  //for(m = 0; m < M; m++)
-    //for(n = 0; n < N; n++){
-      //C[m*ldc+n] = size - 2*C[m*ldc+n];
-      //C[m*ldc+n] *= alphas[m];
-    //} 
+  for(m = 0; m < M; m++){
+    register Dtype a = alphas[m];
+    for(n = 0; n < N; n++){
+      C[m*ldc+n] *= a;
+    } 
+  }
 }
 
 }

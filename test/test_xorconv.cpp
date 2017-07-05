@@ -34,11 +34,11 @@ typedef struct data
 int main()
 {
   //shape 
-  int n = 96;
-  int c = 3;
-  int h = 300;
-  int w = 300;
-  int k = 3;
+  int n = 64;
+  int c = 64;
+  int h = 118;
+  int w = 118;
+  int k = 5;
   int stride = 1;
   int pad = 0;
   int dilation = 1;
@@ -104,14 +104,16 @@ int main()
   float* output = (float*)malloc(sizeof(float)*n*output_h*output_w*n);
 
   struct timeval start,end;
-  gettimeofday(&start, NULL);
   binarizeIm2Col(input.p_data_, bin_input, c, h, w, k, k, pad, pad, stride, stride,
      dilation, dilation);
+  gettimeofday(&start, NULL);
+  //for(int i = 0; i< 200; i++){
   xorGEMM_baseline(n, ceil((float)c*k*k/BIN_SIZE), output_h*output_w,
                     bin_weights.b_data(), ceil((float)c*k*k/BIN_SIZE),
                     bin_input.b_data(), output_h*output_w,
                     output, output_h*output_w,
                     c*k*k, alphas);
+  //}
   gettimeofday(&end, NULL);
   unsigned long diff = 1000 * (end.tv_sec-start.tv_sec)+ (end.tv_usec-start.tv_usec)/1000 ;
   cout<<"xor time: "<< diff<<"/ms"<<endl;
@@ -119,11 +121,17 @@ int main()
   gettimeofday(&start, NULL);
   binarizeIm2Col(input.p_data_, bin_input, c, h, w, k, k, pad, pad, stride, stride,
      dilation, dilation);
-  xorGEMM_omp(n, ceil((float)c*k*k/BIN_SIZE), output_h*output_w,
+  gettimeofday(&end, NULL);
+  diff = 1000 * (end.tv_sec-start.tv_sec)+ (end.tv_usec-start.tv_usec)/1000 ;
+  cout<<"binarieze input: "<< diff<<"/ms"<<endl;
+  gettimeofday(&start, NULL);
+  //for(int i = 0; i< 200; i++){
+  xorGEMM_omp_unrolled(n, ceil((float)c*k*k/BIN_SIZE), output_h*output_w,
                     bin_weights.b_data(), ceil((float)c*k*k/BIN_SIZE),
                     bin_input.b_data(), output_h*output_w,
                     output, output_h*output_w,
                     c*k*k, alphas);
+  //}
   gettimeofday(&end, NULL);
   diff = 1000 * (end.tv_sec-start.tv_sec)+ (end.tv_usec-start.tv_usec)/1000 ;
   cout<<"xor time omp: "<< diff<<"/ms"<<endl;
