@@ -25,4 +25,4 @@ caffe-openblas(OMP_THREAD_NUM=10) | 3.4
 caffe-xnor|5.5| 
 
 ## accuracy test.
-[caffe example](https://github.com/Tyler-D/caffe-rc5_ex/tree/master/examples/xnor)
+[caffe example](https://github.com/Tyler-D/caffe-rc5_ex/tree/master/examples/xor)
